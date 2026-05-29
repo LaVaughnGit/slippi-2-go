@@ -4,6 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .. import database as db
 from ..rank_sync import setup_rank_roles, sync_all
 
 
@@ -35,14 +36,24 @@ class Admin(commands.Cog):
         await sync_all(self.bot, self.db_path)
         await interaction.followup.send("✅ Initial sync complete!", ephemeral=True)
 
+    @app_commands.command(name="set-welcome-channel", description="[Admin] Set the channel where join prompts are posted.")
+    @app_commands.describe(channel="The channel to post welcome messages in")
+    @app_commands.default_permissions(administrator=True)
+    async def set_welcome_channel(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            await interaction.followup.send("Run this in a server.", ephemeral=True)
+            return
+        await db.set_welcome_channel(self.db_path, str(interaction.guild.id), str(channel.id))
+        await interaction.followup.send(f"✅ Welcome messages will now be posted in {channel.mention}.", ephemeral=True)
+
     @app_commands.command(name="admin-unregister", description="[Admin] Remove a member's Slippi registration.")
     @app_commands.describe(member="The member to unregister")
     @app_commands.default_permissions(administrator=True)
     async def admin_unregister(self, interaction: discord.Interaction, member: discord.Member) -> None:
         await interaction.response.defer(ephemeral=True)
-        from .. import database as db2
         from ..rank_sync import RANK_ROLE_NAMES
-        removed = await db2.unregister_player(self.db_path, str(member.id))
+        removed = await db.unregister_player(self.db_path, str(member.id))
         if not removed:
             await interaction.followup.send(f"{member.mention} isn't registered.", ephemeral=True)
             return
