@@ -8,6 +8,12 @@ import aiosqlite
 async def init_db(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS guild_config (
+                guild_id           TEXT PRIMARY KEY,
+                welcome_channel_id TEXT
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS registrations (
                 discord_id   TEXT PRIMARY KEY,
                 connect_code TEXT NOT NULL,
@@ -111,4 +117,23 @@ async def update_player_stats(
             SET display_name = ?, elo = ?, tier = ?, sub_tier = ?, wins = ?, losses = ?, last_updated = datetime('now')
             WHERE discord_id = ?
         """, (display_name, elo, tier, sub_tier, wins, losses, discord_id))
+        await db.commit()
+
+
+async def get_welcome_channel(db_path: str, guild_id: str) -> str | None:
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute(
+            "SELECT welcome_channel_id FROM guild_config WHERE guild_id = ?", (guild_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
+async def set_welcome_channel(db_path: str, guild_id: str, channel_id: str) -> None:
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("""
+            INSERT INTO guild_config (guild_id, welcome_channel_id)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET welcome_channel_id = excluded.welcome_channel_id
+        """, (guild_id, channel_id))
         await db.commit()
