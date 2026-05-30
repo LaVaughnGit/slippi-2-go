@@ -5,14 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime
 
 import discord
+import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from discord.ext import commands
 from dotenv import load_dotenv
 
 from . import database as db
 from .rank_sync import sync_all
+from .scheduled_posts import post_leaderboard
 
 load_dotenv()
 
@@ -65,8 +68,31 @@ class SlippiBot(commands.Bot):
             args=[self, self.db_path],
             id="rank_sync",
         )
+
+        # Leaderboard posts — every 4 days, Pacific Time
+        # Opening post: midnight PT on May 31, 2026 and every 4 days after
+        # Closing post: 11:59 PM PT on June 3, 2026 and every 4 days after
+        pacific = pytz.timezone("America/Los_Angeles")
+        self.scheduler.add_job(
+            post_leaderboard,
+            "interval",
+            days=4,
+            start_date=datetime(2026, 5, 31, 0, 0, 0, tzinfo=pacific),
+            args=[self, self.db_path, "Opening"],
+            id="leaderboard_open",
+        )
+        self.scheduler.add_job(
+            post_leaderboard,
+            "interval",
+            days=4,
+            start_date=datetime(2026, 6, 3, 23, 59, 0, tzinfo=pacific),
+            args=[self, self.db_path, "Closing"],
+            id="leaderboard_close",
+        )
+
         self.scheduler.start()
         log.info("Rank sync scheduler started — interval: %d minutes", interval)
+        log.info("Leaderboard scheduler started — every 4 days PT (opening: May 31, closing: June 3)")
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id)  # type: ignore[union-attr]
