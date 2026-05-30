@@ -79,8 +79,8 @@ class Registration(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        embed = discord.Embed(
-            title="Welcome to the server!",
+        dm_embed = discord.Embed(
+            title=f"Welcome to {member.guild.name}!",
             description=(
                 "To get your Slippi rank displayed next to your name, "
                 "head back to the server and run:\n\n"
@@ -91,11 +91,34 @@ class Registration(commands.Cog):
             ),
             color=discord.Color.blurple(),
         )
-        embed.set_footer(text="You can update your rank anytime with /update")
+        dm_embed.set_footer(text="You can update your rank anytime with /update")
+
         try:
-            await member.send(embed=embed)
+            await member.send(embed=dm_embed)
         except discord.Forbidden:
             pass  # User has DMs disabled — nothing we can do
+
+        # Server channel message
+        channel_id = await db.get_welcome_channel(self.db_path, str(member.guild.id))
+        channel = (
+            member.guild.get_channel(int(channel_id))
+            if channel_id
+            else member.guild.system_channel
+        )
+        if channel:
+            server_embed = discord.Embed(
+                description=(
+                    f"Welcome {member.mention}!\n\n"
+                    "Use `/register <connect code>` to link your Slippi account and get your rank role.\n\n"
+                    "For example: `/register ABC#123`"
+                ),
+                color=discord.Color.blurple(),
+            )
+            server_embed.set_thumbnail(url=member.display_avatar.url)
+            try:
+                await channel.send(embed=server_embed)
+            except discord.Forbidden:
+                pass
 
     @app_commands.command(name="unregister", description="Unlink your Slippi account from this server.")
     async def unregister(self, interaction: discord.Interaction) -> None:

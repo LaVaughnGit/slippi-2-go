@@ -20,6 +20,10 @@ async def init_db(db_path: str) -> None:
                 await db.commit()
             except Exception:
                 pass
+                guild_id           TEXT PRIMARY KEY,
+                welcome_channel_id TEXT
+            )
+        """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS registrations (
                 discord_id   TEXT PRIMARY KEY,
