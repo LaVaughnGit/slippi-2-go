@@ -60,7 +60,7 @@ class SlippiBot(commands.Bot):
             log.info("Slash commands synced globally (may take up to 1 hour to propagate)")
 
         # Background rank refresh
-        interval = int(os.getenv("SYNC_INTERVAL_MINUTES", "45"))
+        interval = int(os.getenv("SYNC_INTERVAL_MINUTES", "20"))
         self.scheduler.add_job(
             sync_all,
             "interval",

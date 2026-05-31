@@ -1,11 +1,13 @@
 """Admin slash commands: /setup."""
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from .. import database as db
-from ..rank_sync import setup_rank_roles, sync_all
+from .. import slippi
+from ..rank_sync import setup_rank_roles, sync_all, _apply_rank
 from ..scheduled_posts import post_leaderboard
 
 
@@ -82,6 +84,57 @@ class Admin(commands.Cog):
         await interaction.followup.send(
             f"✅ Leaderboard posts will appear in {channel.mention}.\n"
             "Schedule: opening midnight PT · closing 11:59 PM PT · every 4 days starting May 31.",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="admin-set-code", description="[Admin] Set or change a member's Slippi connect code.")
+    @app_commands.describe(member="The member to update", connect_code="Their Slippi connect code (e.g. ABC#123)")
+    @app_commands.default_permissions(administrator=True)
+    async def admin_set_code(self, interaction: discord.Interaction, member: discord.Member, connect_code: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            await interaction.followup.send("Run this in a server.", ephemeral=True)
+            return
+
+        normalized = connect_code.upper().replace("-", "#")
+
+        existing = await db.get_player_by_code(self.db_path, normalized)
+        if existing and existing["discord_id"] != str(member.id):
+            owner = interaction.guild.get_member(int(existing["discord_id"]))
+            owner_str = owner.mention if owner else f"<@{existing['discord_id']}>"
+            await interaction.followup.send(
+                f"❌ **{normalized}** is already registered to {owner_str}.", ephemeral=True
+            )
+            return
+
+        async with aiohttp.ClientSession() as session:
+            data = await slippi.fetch_player(normalized, session)
+
+        if data is None:
+            await interaction.followup.send(
+                f"❌ Couldn't find a Slippi account for **{normalized}**. Double-check the code.",
+                ephemeral=True,
+            )
+            return
+
+        await db.register_player(
+            self.db_path,
+            str(member.id),
+            normalized,
+            data["display_name"],
+            data["elo"],
+            data["tier"],
+            data["sub_tier"],
+            data["wins"],
+            data["losses"],
+        )
+
+        data["connect_code"] = normalized
+        await _apply_rank(member, data, interaction.guild)
+
+        elo_str = f"{data['elo']:.2f}" if data["elo"] is not None else "Unranked"
+        await interaction.followup.send(
+            f"✅ Updated {member.mention} → **{normalized}** ({data['tier_emoji']} {data['sub_tier']}, {elo_str} ELO)",
             ephemeral=True,
         )
 

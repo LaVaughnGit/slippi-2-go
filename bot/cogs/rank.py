@@ -24,7 +24,12 @@ def _pos_indicator(prev: Optional[int], curr: int) -> str:
     return ""
 
 
-def _rank_embed(player: dict, member: Optional[discord.Member] = None) -> discord.Embed:
+def _rank_embed(
+    player: dict,
+    member: Optional[discord.Member] = None,
+    server_rank: Optional[int] = None,
+    server_total: Optional[int] = None,
+) -> discord.Embed:
     elo_str = f"{player['elo']:.2f}" if player.get("elo") is not None else "Unranked"
     total = (player.get("wins") or 0) + (player.get("losses") or 0)
     winrate = f"{player['wins'] / total * 100:.1f}%" if total > 0 else "N/A"
@@ -40,6 +45,8 @@ def _rank_embed(player: dict, member: Optional[discord.Member] = None) -> discor
     embed.add_field(name="Wins", value=str(player.get("wins", 0)), inline=True)
     embed.add_field(name="Losses", value=str(player.get("losses", 0)), inline=True)
     embed.add_field(name="Win Rate", value=winrate, inline=True)
+    if server_rank is not None and server_total is not None:
+        embed.add_field(name="Server Placement", value=f"#{server_rank} of {server_total}", inline=True)
     if player.get("daily_global_placement"):
         embed.add_field(name="Global Rank", value=f"#{player['daily_global_placement']}", inline=True)
     if member:
@@ -68,7 +75,24 @@ class Rank(commands.Cog):
             return
 
         disc_member = interaction.guild.get_member(target.id) if interaction.guild else None
-        embed = _rank_embed(player, disc_member)
+
+        server_rank = None
+        server_total = None
+        if interaction.guild:
+            all_players = await db.get_all_players(self.db_path)
+            guild_ids = {
+                str(p["discord_id"])
+                for p in all_players
+                if interaction.guild.get_member(int(p["discord_id"]))
+            }
+            server_players = [p for p in all_players if str(p["discord_id"]) in guild_ids]
+            server_total = len(server_players)
+            for i, p in enumerate(server_players):
+                if str(p["discord_id"]) == str(target.id):
+                    server_rank = i + 1
+                    break
+
+        embed = _rank_embed(player, disc_member, server_rank, server_total)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="update", description="Manually refresh your Slippi rank right now.")
@@ -159,7 +183,7 @@ class Rank(commands.Cog):
             description="\n".join(lines),
             color=discord.Color.gold(),
         )
-        embed.set_footer(text="Rankings refresh automatically every ~45 minutes")
+        embed.set_footer(text="Rankings refresh automatically every ~20 minutes")
         await interaction.followup.send(embed=embed)
 
 
