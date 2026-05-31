@@ -14,16 +14,12 @@ async def init_db(db_path: str) -> None:
                 leaderboard_channel_id  TEXT
             )
         """)
-        for col in ("welcome_channel_id", "leaderboard_channel_id"):
+        for col in ("welcome_channel_id", "leaderboard_channel_id", "leaderboard_name"):
             try:
                 await db.execute(f"ALTER TABLE guild_config ADD COLUMN {col} TEXT")
                 await db.commit()
             except Exception:
                 pass
-                guild_id           TEXT PRIMARY KEY,
-                welcome_channel_id TEXT
-            )
-        """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS registrations (
                 discord_id   TEXT PRIMARY KEY,
@@ -43,6 +39,14 @@ async def init_db(db_path: str) -> None:
             await db.commit()
         except Exception:
             pass
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS leaderboard_positions (
+                guild_id   TEXT,
+                discord_id TEXT,
+                position   INTEGER,
+                PRIMARY KEY (guild_id, discord_id)
+            )
+        """)
         await db.commit()
 
 
@@ -166,4 +170,43 @@ async def set_leaderboard_channel(db_path: str, guild_id: str, channel_id: str) 
             VALUES (?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET leaderboard_channel_id = excluded.leaderboard_channel_id
         """, (guild_id, channel_id))
+        await db.commit()
+
+
+async def get_leaderboard_positions(db_path: str, guild_id: str) -> dict:
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute(
+            "SELECT discord_id, position FROM leaderboard_positions WHERE guild_id = ?", (guild_id,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return {row[0]: row[1] for row in rows}
+
+
+async def get_leaderboard_name(db_path: str, guild_id: str) -> str | None:
+    async with aiosqlite.connect(db_path) as db:
+        async with db.execute(
+            "SELECT leaderboard_name FROM guild_config WHERE guild_id = ?", (guild_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
+async def set_leaderboard_name(db_path: str, guild_id: str, name: str) -> None:
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("""
+            INSERT INTO guild_config (guild_id, leaderboard_name)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET leaderboard_name = excluded.leaderboard_name
+        """, (guild_id, name))
+        await db.commit()
+
+
+async def save_leaderboard_positions(db_path: str, guild_id: str, positions: dict) -> None:
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("DELETE FROM leaderboard_positions WHERE guild_id = ?", (guild_id,))
+        for discord_id, position in positions.items():
+            await db.execute(
+                "INSERT INTO leaderboard_positions (guild_id, discord_id, position) VALUES (?, ?, ?)",
+                (guild_id, discord_id, position),
+            )
         await db.commit()

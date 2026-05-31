@@ -13,6 +13,17 @@ from .. import slippi
 from ..rank_sync import _apply_rank
 
 
+def _pos_indicator(prev: Optional[int], curr: int) -> str:
+    if prev is None:
+        return ""
+    delta = prev - curr  # positive = moved up (lower position number = better)
+    if delta > 0:
+        return f" 🌲+{delta}"
+    if delta < 0:
+        return f" 🔻{delta}"
+    return ""
+
+
 def _rank_embed(player: dict, member: Optional[discord.Member] = None) -> discord.Embed:
     elo_str = f"{player['elo']:.2f}" if player.get("elo") is not None else "Unranked"
     total = (player.get("wins") or 0) + (player.get("losses") or 0)
@@ -122,18 +133,29 @@ class Rank(commands.Cog):
             await interaction.followup.send("No registered members found in this server.")
             return
 
+        guild_id = str(guild.id) if guild else ""
+        prev_positions = await db.get_leaderboard_positions(self.db_path, guild_id)
+        leaderboard_name = await db.get_leaderboard_name(self.db_path, guild_id) or "Server Leaderboard"
+
         lines = []
         medals = ["🥇", "🥈", "🥉"]
+        new_positions = {}
         for i, p in enumerate(server_players[:10]):
+            curr_pos = i + 1
+            did = p["discord_id"]
+            new_positions[did] = curr_pos
             pos = medals[i] if i < 3 else f"`{i+1}.`"
             elo = f"{p['elo']:.0f}" if p.get("elo") is not None else "—"
-            member = guild.get_member(int(p["discord_id"])) if guild else None
+            member = guild.get_member(int(did)) if guild else None
             name = member.display_name if member else p["display_name"]
             rank_display = p.get("sub_tier") or p.get("tier", "?")
-            lines.append(f"{pos} **{name}** — {p.get('tier_emoji','')} {rank_display} ({elo} ELO)")
+            indicator = _pos_indicator(prev_positions.get(did), curr_pos)
+            lines.append(f"{pos} **{name}** — {p.get('tier_emoji','')} {rank_display} (**{elo}** ELO){indicator}")
+
+        await db.save_leaderboard_positions(self.db_path, guild_id, new_positions)
 
         embed = discord.Embed(
-            title="🏆 Server Leaderboard",
+            title=f"🏆 {leaderboard_name}",
             description="\n".join(lines),
             color=discord.Color.gold(),
         )

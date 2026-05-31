@@ -85,6 +85,17 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.command(name="rename-leaderboard", description="[Admin] Set a custom name for the leaderboard.")
+    @app_commands.describe(name="The new leaderboard title (emojis allowed)")
+    @app_commands.default_permissions(administrator=True)
+    async def rename_leaderboard(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            await interaction.followup.send("Run this in a server.", ephemeral=True)
+            return
+        await db.set_leaderboard_name(self.db_path, str(interaction.guild.id), name)
+        await interaction.followup.send(f"✅ Leaderboard name set to: **{name}**", ephemeral=True)
+
     @app_commands.command(name="post-leaderboard", description="[Admin] Post the leaderboard right now.")
     @app_commands.default_permissions(administrator=True)
     async def post_leaderboard_now(self, interaction: discord.Interaction) -> None:
