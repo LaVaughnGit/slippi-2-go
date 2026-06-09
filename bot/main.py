@@ -77,17 +77,21 @@ class SlippiBot(commands.Bot):
             post_leaderboard,
             "interval",
             days=4,
-            start_date=datetime(2026, 5, 31, 0, 0, 0, tzinfo=pacific),
+            start_date=datetime(2026, 5, 31, 0, 0, 0),
+            timezone=pacific,
             args=[self, self.db_path, "Opening"],
             id="leaderboard_open",
+            misfire_grace_time=60,
         )
         self.scheduler.add_job(
             post_leaderboard,
             "interval",
             days=4,
-            start_date=datetime(2026, 6, 3, 23, 59, 0, tzinfo=pacific),
+            start_date=datetime(2026, 6, 3, 23, 59, 0),
+            timezone=pacific,
             args=[self, self.db_path, "Closing"],
             id="leaderboard_close",
+            misfire_grace_time=60,
         )
 
         self.scheduler.start()
